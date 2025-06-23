@@ -17,6 +17,9 @@ NEWSPIDER_MODULE = "genshin_spider.spiders"
 # REDIS_URL = 'redis://localhost:6379'
 
 # MongoDB配置
+ITEM_PIPELINES = {
+    'genshin_spider.pipelines.MongoDBPipeline': 300,
+}
 MONGODB_URI = 'mongodb://localhost:27017'
 MONGODB_DATABASE = 'genshin_db'
 ROBOTSTXT_OBEY = False 

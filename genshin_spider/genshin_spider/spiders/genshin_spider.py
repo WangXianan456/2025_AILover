@@ -25,51 +25,49 @@ class GenshinSpider(scrapy.Spider):
         with open("page_debug.html", "w", encoding="utf-8") as f:
             f.write(response.text)
 
-        # TODO: 修改为实际的class名
-        character_items = response.css('div.item')  # 这里需要你根据实际页面结构修改
+        # 角色卡片选择器修正
+        character_items = response.css('div.divsort.g')
         logging.info(f"发现角色卡片数量: {len(character_items)}")
 
         for item in character_items:
-            # 角色名称
-            name = item.css('span.itemname::text').get()
+            # 名称
+            name = item.css('div.L::text').get()
+            if not name:
+                name = item.css('a:last-child::text').get()
             if not name:
                 continue
-            
-            # 角色详情页链接
-            detail_url = item.css('a::attr(href)').get()
+
+            # 详情页链接
+            detail_url = item.css('a:last-child::attr(href)').get()
             if not detail_url:
                 continue
-            
-            # 完整URL
             full_url = urljoin(response.url, detail_url)
-            
-            # 星级（通过星星图标数量判断）
-            stars = len(item.css('div.star div.staricon'))
-            
-            # 元素属性
-            element = item.css('div.element img::attr(alt)').get()
-            
-            # 武器类型
-            weapon = item.css('div.weapon img::attr(alt)').get()
-            
+
+            # 星级
+            class_str = ' '.join(item.attrib.get('class', '').split())
+            rarity = 5 if 'C5星' in class_str else 4 if 'C4星' in class_str else None
+
+            # 元素属性和武器类型
+            element = item.attrib.get('data-param2', '').strip()
+            weapon = item.attrib.get('data-param3', '').strip()
+
             # 图片URL
-            image_url = item.css('div.avatar img::attr(src)').get()
+            image_url = item.css('img::attr(src)').get()
             if image_url:
                 image_url = urljoin(response.url, image_url)
-            
+
             # 生成角色ID
-            character_id = re.search(r'/(\w+)\.png', image_url).group(1) if image_url else name.lower().replace(' ', '_')
-            
+            character_id = re.sub(r'\W+', '', name.strip().lower())
+
             meta = {
                 'character_id': character_id,
                 'name': name.strip(),
-                'rarity': stars,
+                'rarity': rarity,
                 'element': element,
                 'weapon': weapon,
                 'image_url': image_url
             }
-            
-            # 请求详情页
+
             yield Request(
                 url=full_url,
                 callback=self.parse_character,
@@ -91,8 +89,8 @@ class GenshinSpider(scrapy.Spider):
             for row in stat_table.css('tr')[1:]:
                 columns = row.css('td')
                 if len(columns) >= 2:
-                    key = columns[0].css('::text').get().strip()
-                    value = columns[1].css('::text').get().strip()
+                    key = (columns[0].css('::text').get() or '').strip()
+                    value = (columns[1].css('::text').get() or '').strip()
                     stats[key] = value
         
         # 角色技能
@@ -109,16 +107,16 @@ class GenshinSpider(scrapy.Spider):
         
         # 构建完整角色数据
         character_data = {
-            'character_id': meta['character_id'],
-            'name': meta['name'],
-            'rarity': meta['rarity'],
-            'element': meta['element'],
-            'weapon': meta['weapon'],
-            'image_url': meta['image_url'],
-            'detail_url': response.url,
-            'story': story,
-            'stats': stats,
-            'skills': skills,
+            'character_id': str(meta['character_id']),
+            'name': str(meta['name']),
+            'rarity': int(meta['rarity']) if meta['rarity'] else None,
+            'element': str(meta['element']),
+            'weapon': str(meta['weapon']),
+            'image_url': str(meta['image_url']) if meta['image_url'] else '',
+            'detail_url': str(response.url),
+            'story': str(story),
+            'stats': {str(k): str(v) for k, v in stats.items()},
+            'skills': [{'name': str(s['name']), 'description': str(s['description'])} for s in skills],
             'last_updated': datetime.now().isoformat()
         }
         
