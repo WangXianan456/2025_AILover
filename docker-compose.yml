@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:7
+    container_name: ailover-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: genshin_db
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ailover-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ailover}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ailover_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-ailover_db}
+
+  redis:
+    image: redis:7-alpine
+    container_name: ailover-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mongodb_data:
+  postgres_data:
+  redis_data:

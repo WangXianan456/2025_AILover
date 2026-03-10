@@ -42,3 +42,28 @@ class MongoDBPipeline:
         except Exception as e:
             spider.logger.error(f"数据库错误: {str(e)}")
         return item
+
+
+class CharacterProfileMongoPipeline:
+    collection_name = 'genshin_character_profiles'
+
+    def open_spider(self, spider):
+        self.client = MongoClient(spider.settings.get('MONGODB_URI', 'mongodb://localhost:27017'))
+        self.db = self.client[spider.settings.get('MONGODB_DATABASE', 'genshin_db')]
+        self.collection = self.db[self.collection_name]
+        self.collection.create_index('name', unique=True)
+
+    def close_spider(self, spider):
+        self.client.close()
+
+    def process_item(self, item, spider):
+        try:
+            self.collection.update_one(
+                {'name': item['name']},
+                {'$set': dict(item)},
+                upsert=True
+            )
+            spider.logger.info(f"更新角色个人形象: {item['name']}")
+        except Exception as e:
+            spider.logger.error(f"个人形象存储错误: {str(e)}")
+        return item
