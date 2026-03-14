@@ -18,18 +18,20 @@ def build_system_prompt(char: dict) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def chat(messages: list[dict[str, str]], system_prompt: str) -> str:
+def chat_stream(messages: list[dict[str, str]], system_prompt: str):
     provider = os.getenv("LLM_PROVIDER", "dashscope")
     model = os.getenv("LLM_MODEL", "qwen-plus")
     api_key = os.getenv("DASHSCOPE_API_KEY", "")
     if not api_key:
-        return "未配置 DASHSCOPE_API_KEY"
+        yield "未配置 DASHSCOPE_API_KEY"
+        return
     if provider == "dashscope":
-        return _call_dashscope(api_key, model, messages, system_prompt)
-    return "不支持的 LLM 提供商"
+        yield from _call_dashscope_stream(api_key, model, messages, system_prompt)
+    else:
+        yield "不支持的 LLM 提供商"
 
 
-def _call_dashscope(api_key: str, model: str, messages: list[dict], system_prompt: str) -> str:
+def _call_dashscope_stream(api_key: str, model: str, messages: list[dict], system_prompt: str):
     import dashscope
     dashscope.api_key = api_key
     base_url = os.getenv("DASHSCOPE_HTTP_BASE_URL")
@@ -39,21 +41,25 @@ def _call_dashscope(api_key: str, model: str, messages: list[dict], system_promp
     for m in messages[-20:]:
         msgs.append({"role": m["role"], "content": m["content"]})
     try:
-        resp = dashscope.Generation.call(
+        responses = dashscope.Generation.call(
             model=model,
             messages=msgs,
             result_format="message",
+            stream=True,
+            incremental_output=True,
             temperature=0.8,
             max_tokens=512,
         )
-        if resp.status_code == 200 and resp.output and resp.output.get("choices"):
-            return resp.output["choices"][0]["message"]["content"]
-        err_code = getattr(resp, "code", None) or resp.status_code
-        err_msg = getattr(resp, "message", None) or ""
-        req_id = getattr(resp, "request_id", None) or ""
-        detail = f"{err_code} {err_msg}".strip() or "未知"
-        if req_id:
-            detail += f" (request_id: {req_id})"
-        return f"API 错误: {detail}"
+        for resp in responses:
+            if resp.status_code == 200 and resp.output and resp.output.get("choices"):
+                yield resp.output["choices"][0]["message"]["content"]
+            else:
+                err_code = getattr(resp, "code", None) or resp.status_code
+                err_msg = getattr(resp, "message", None) or ""
+                req_id = getattr(resp, "request_id", None) or ""
+                detail = f"{err_code} {err_msg}".strip() or "未知"
+                if req_id:
+                    detail += f" (request_id: {req_id})"
+                yield f"\n[API 错误: {detail}]"
     except Exception as e:
-        return f"调用失败: {str(e)}"
+        yield f"\n[调用失败: {str(e)}]"

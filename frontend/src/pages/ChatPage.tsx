@@ -36,13 +36,34 @@ export default function ChatPage() {
     const text = input.trim()
     if (!text || !char || loading) return
     setInput('')
-    setMessages((m) => [...m, { role: 'user', content: text }])
+    setMessages((m) => [...m, { role: 'user', content: text }, { role: 'assistant', content: '' }])
     setLoading(true)
     try {
-      const { reply } = await api.chat(char.character_id, text)
-      setMessages((m) => [...m, { role: 'assistant', content: reply }])
+      await api.chatStream(char.character_id, text, (chunk) => {
+        setMessages((m) => {
+          const newMessages = [...m]
+          const lastIndex = newMessages.length - 1
+          if (newMessages[lastIndex].role === 'assistant') {
+            newMessages[lastIndex] = {
+              ...newMessages[lastIndex],
+              content: newMessages[lastIndex].content + chunk,
+            }
+          }
+          return newMessages
+        })
+      })
     } catch (e) {
-      setMessages((m) => [...m, { role: 'assistant', content: `发送失败: ${(e as Error).message}` }])
+      setMessages((m) => {
+        const newMessages = [...m]
+        const lastIndex = newMessages.length - 1
+        if (newMessages[lastIndex].role === 'assistant') {
+          newMessages[lastIndex] = {
+            ...newMessages[lastIndex],
+            content: newMessages[lastIndex].content || `发送失败: ${(e as Error).message}`
+          }
+        }
+        return newMessages
+      })
     } finally {
       setLoading(false)
     }

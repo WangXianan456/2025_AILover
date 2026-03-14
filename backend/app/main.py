@@ -1,4 +1,8 @@
 from pathlib import Path
+import os
+
+# 为解决本地代理/梯子导致调用阿里云DashScope出现SSL/EOF错误，我们将其放入NO_PROXY中
+os.environ["NO_PROXY"] = "dashscope.aliyuncs.com," + os.environ.get("NO_PROXY", "")
 
 from dotenv import load_dotenv
 

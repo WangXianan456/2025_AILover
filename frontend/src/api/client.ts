@@ -40,6 +40,47 @@ export const api = {
     fetchApi<Record<string, Array<{ character_id: string; name: string; birthday: string; day: number; image_url?: string }>>>(
       `${API_BASE}/characters/birthday-calendar`
     ),
+  chatStream: async (characterId: string, content: string, onChunk: (chunk: string) => void) => {
+    const r = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ character_id: characterId, content }),
+    })
+    
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}))
+      throw new Error(r.status === 429 ? (data.detail || '请求过于频繁，请稍后再试') : `API error: ${r.status}`)
+    }
+    
+    const reader = r.body?.getReader()
+    if (!reader) throw new Error('无响应流')
+    const decoder = new TextDecoder()
+    let reply = ''
+    let buffer = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6).trim()
+          if (dataStr === '[DONE]') break
+          if (dataStr) {
+            try {
+              const parsed = JSON.parse(dataStr)
+              if (parsed.chunk) {
+                reply += parsed.chunk
+                onChunk(parsed.chunk)
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    }
+    return { reply }
+  },
   chat: (characterId: string, content: string) =>
     fetch(`${API_BASE}/chat`, {
       method: 'POST',
